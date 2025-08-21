@@ -3,7 +3,7 @@ const cors = require("cors");
 const app = express();
 const port = process.env.PORT || 3000;
 require("dotenv").config();
-const { MongoClient, ServerApiVersion, ObjectId  } = require("mongodb");
+const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 
 app.use(cors());
 app.use(express.json());
@@ -37,22 +37,21 @@ async function run() {
 
     // Read a single event by ID
     app.get("/events/:id", async (req, res) => {
-  try {
-    const id = req.params.id;
-    const query = { _id: new ObjectId(id) };
-    const result = await eventsCollection.findOne(query);
+      try {
+        const id = req.params.id;
+        const query = { _id: new ObjectId(id) };
+        const result = await eventsCollection.findOne(query);
 
-    if (!result) {
-      return res.status(404).send({ message: "Event not found" });
-    }
+        if (!result) {
+          return res.status(404).send({ message: "Event not found" });
+        }
 
-    res.send(result);
-  } catch (error) {
-    console.error("Error fetching event:", error);
-    res.status(500).send({ message: "Server error" });
-  }
-});
-
+        res.send(result);
+      } catch (error) {
+        console.error("Error fetching event:", error);
+        res.status(500).send({ message: "Server error" });
+      }
+    });
 
     // Create an event (Private route, requires JWT)
     app.post("/events", async (req, res) => {
@@ -62,7 +61,7 @@ async function run() {
     });
 
     // Update an event (Private route, requires JWT)
-    app.put('/events/:id',  async (req, res) => {
+    app.put("/events/:id", async (req, res) => {
       const id = req.params.id;
       const updatedEvent = req.body;
       const filter = { _id: new ObjectId(id) };
@@ -74,14 +73,19 @@ async function run() {
           eventDate: updatedEvent.eventDate,
           description: updatedEvent.description,
           imageUrl: updatedEvent.imageUrl,
+          location: updatedEvent.location,
         },
       };
-      const result = await eventsCollection.updateOne(filter, updateDoc, options);
+      const result = await eventsCollection.updateOne(
+        filter,
+        updateDoc,
+        options
+      );
       res.send(result);
     });
 
     // Delete an event (Private route, requires JWT)
-    app.delete('/events/:id',  async (req, res) => {
+    app.delete("/events/:id", async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
       const result = await eventsCollection.deleteOne(query);
@@ -125,7 +129,7 @@ async function run() {
 
     // Manage Events (for organizers)
     // Get events created by a specific user (Private route, requires JWT)
-    app.get('/manageEvents',  async (req, res) => {
+    app.get("/manageEvents", async (req, res) => {
       const email = req.query.email;
       // if (req.decoded.email !== email) {
       //   return res.status(403).send({ error: true, message: 'forbidden access' });
