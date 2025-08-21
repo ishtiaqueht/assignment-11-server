@@ -92,40 +92,40 @@ async function run() {
       res.send(result);
     });
 
-    // // My Bookings & Booking Operations
-    // // Get all bookings for a specific user (Private route, requires JWT)
-    // app.get('/myBookings',  async (req, res) => {
-    //   const email = req.query.email;
-    //   if (req.decoded.email !== email) {
-    //     return res.status(403).send({ error: true, message: 'forbidden access' });
-    //   }
-    //   const query = { userEmail: email };
-    //   const result = await bookingsCollection.find(query).toArray();
-    //   res.send(result);
-    // });
+    // My Bookings & Booking Operations
+    // Get all bookings for a specific user (Private route, requires JWT)
+    app.get('/myBookings',  async (req, res) => {
+      const email = req.query.email;
+      // if (req.decoded.email !== email) {
+      //   return res.status(403).send({ error: true, message: 'forbidden access' });
+      // }
+      const query = { userEmail: email };
+      const result = await bookingsCollection.find(query).toArray();
+      res.send(result);
+    });
 
-    // // Book an event (Create booking)
-    // app.post('/bookings',  async (req, res) => {
-    //   const booking = req.body;
-    //   const query = {
-    //     eventId: booking.eventId,
-    //     userEmail: booking.userEmail
-    //   };
-    //   const existingBooking = await bookingsCollection.findOne(query);
-    //   if (existingBooking) {
-    //     return res.status(409).send({ message: 'You have already booked this event.' });
-    //   }
-    //   const result = await bookingsCollection.insertOne(booking);
-    //   res.send(result);
-    // });
+    // Book an event (Create booking)
+    app.post('/bookings',  async (req, res) => {
+      const booking = req.body;
+      const query = {
+        eventId: booking.eventId,
+        userEmail: booking.userEmail
+      };
+      const existingBooking = await bookingsCollection.findOne(query);
+      if (existingBooking) {
+        return res.status(409).send({ message: 'You have already booked this event.' });
+      }
+      const result = await bookingsCollection.insertOne(booking);
+      res.send(result);
+    });
 
-    // // Delete a booking (Cancel booking)
-    // app.delete('/bookings/:id',  async (req, res) => {
-    //   const id = req.params.id;
-    //   const query = { _id: new ObjectId(id) };
-    //   const result = await bookingsCollection.deleteOne(query);
-    //   res.send(result);
-    // });
+    // Delete a booking (Cancel booking)
+    app.delete('/bookings/:id',  async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await bookingsCollection.deleteOne(query);
+      res.send(result);
+    });
 
     // Manage Events (for organizers)
     // Get events created by a specific user (Private route, requires JWT)
