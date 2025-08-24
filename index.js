@@ -1,16 +1,24 @@
+// backend/index.js
 const express = require("express");
 const cors = require("cors");
 const app = express();
 const port = process.env.PORT || 3000;
 require("dotenv").config();
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
+const admin = require("firebase-admin");
+
+// 🔹 Firebase Admin initialize
+const serviceAccount = require("./assignment-11-key.json"); // তোমার service account path
+
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount),
+});
 
 app.use(cors());
 app.use(express.json());
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.4uzxkby.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 
-// Create a MongoClient with a MongoClientOptions object to set the Stable API version
 const client = new MongoClient(uri, {
   serverApi: {
     version: ServerApiVersion.v1,
@@ -19,33 +27,52 @@ const client = new MongoClient(uri, {
   },
 });
 
+// 🔹 Middleware: Verify Firebase ID Token
+const verifyFirebaseToken = async (req, res, next) => {
+  try {
+    const authHeader = req.headers.authorization || "";
+    const token = authHeader.startsWith("Bearer ")
+      ? authHeader.split(" ")[1]
+      : null;
+
+    if (!token) return res.status(401).send({ message: "No token provided" });
+
+    const decodedUser = await admin.auth().verifyIdToken(token);
+    req.decoded = decodedUser;
+    next();
+  } catch (err) {
+    return res.status(401).send({ message: "Unauthorized" });
+  }
+};
+
+// 🔹 Middleware: Ensure email match
+const ensureEmailMatch = (req, res, next) => {
+  const emailFromQuery = req.query.email || req.body.userEmail || req.body.creatorEmail;
+  if (emailFromQuery && emailFromQuery !== req.decoded.email) {
+    return res.status(403).send({ error: true, message: "Forbidden access" });
+  }
+  next();
+};
+
 async function run() {
   try {
-    // Connect the client to the server	(optional starting in v4.7)
     await client.connect();
 
-    // Database and Collections
     const database = client.db("athleticEventsDB");
     const eventsCollection = database.collection("events");
     const bookingsCollection = database.collection("bookings");
 
-    // Read all events
+    // Public Routes
     app.get("/events", async (req, res) => {
       const result = await eventsCollection.find().toArray();
       res.send(result);
     });
 
-    // Read a single event by ID
     app.get("/events/:id", async (req, res) => {
       try {
         const id = req.params.id;
-        const query = { _id: new ObjectId(id) };
-        const result = await eventsCollection.findOne(query);
-
-        if (!result) {
-          return res.status(404).send({ message: "Event not found" });
-        }
-
+        const result = await eventsCollection.findOne({ _id: new ObjectId(id) });
+        if (!result) return res.status(404).send({ message: "Event not found" });
         res.send(result);
       } catch (error) {
         console.error("Error fetching event:", error);
@@ -53,19 +80,18 @@ async function run() {
       }
     });
 
-    // Create an event (Private route, requires JWT)
-    app.post("/events", async (req, res) => {
+    // Private Routes
+    app.post("/events", verifyFirebaseToken, ensureEmailMatch, async (req, res) => {
       const newEvent = req.body;
+      newEvent.creatorEmail = req.decoded.email;
       const result = await eventsCollection.insertOne(newEvent);
       res.send(result);
     });
 
-    // Update an event (Private route, requires JWT)
-    app.put("/events/:id", async (req, res) => {
+    app.put("/events/:id", verifyFirebaseToken, ensureEmailMatch, async (req, res) => {
       const id = req.params.id;
       const updatedEvent = req.body;
-      const filter = { _id: new ObjectId(id) };
-      const options = { upsert: true };
+      const filter = { _id: new ObjectId(id), creatorEmail: req.decoded.email };
       const updateDoc = {
         $set: {
           eventName: updatedEvent.eventName,
@@ -76,76 +102,51 @@ async function run() {
           location: updatedEvent.location,
         },
       };
-      const result = await eventsCollection.updateOne(
-        filter,
-        updateDoc,
-        options
-      );
+      const result = await eventsCollection.updateOne(filter, updateDoc);
       res.send(result);
     });
 
-    // Delete an event (Private route, requires JWT)
-    app.delete("/events/:id", async (req, res) => {
+    app.delete("/events/:id", verifyFirebaseToken, async (req, res) => {
       const id = req.params.id;
-      const query = { _id: new ObjectId(id) };
+      const query = { _id: new ObjectId(id), creatorEmail: req.decoded.email };
       const result = await eventsCollection.deleteOne(query);
       res.send(result);
     });
 
-    // My Bookings & Booking Operations
-    // Get all bookings for a specific user (Private route, requires JWT)
-    app.get('/myBookings',  async (req, res) => {
+    app.get("/myBookings", verifyFirebaseToken, ensureEmailMatch, async (req, res) => {
       const email = req.query.email;
-      // if (req.decoded.email !== email) {
-      //   return res.status(403).send({ error: true, message: 'forbidden access' });
-      // }
-      const query = { userEmail: email };
-      const result = await bookingsCollection.find(query).toArray();
+      const result = await bookingsCollection.find({ userEmail: email }).toArray();
       res.send(result);
     });
 
-    // Book an event (Create booking)
-    app.post('/bookings',  async (req, res) => {
+    app.post("/bookings", verifyFirebaseToken, ensureEmailMatch, async (req, res) => {
       const booking = req.body;
-      const query = {
+      booking.userEmail = req.decoded.email;
+      const existingBooking = await bookingsCollection.findOne({
         eventId: booking.eventId,
-        userEmail: booking.userEmail
-      };
-      const existingBooking = await bookingsCollection.findOne(query);
-      if (existingBooking) {
-        return res.status(409).send({ message: 'You have already booked this event.' });
-      }
+        userEmail: booking.userEmail,
+      });
+      if (existingBooking) return res.status(409).send({ message: "Already booked" });
       const result = await bookingsCollection.insertOne(booking);
       res.send(result);
     });
 
-    // Delete a booking (Cancel booking)
-    app.delete('/bookings/:id',  async (req, res) => {
+    app.delete("/bookings/:id", verifyFirebaseToken, async (req, res) => {
       const id = req.params.id;
-      const query = { _id: new ObjectId(id) };
+      const query = { _id: new ObjectId(id), userEmail: req.decoded.email };
       const result = await bookingsCollection.deleteOne(query);
       res.send(result);
     });
 
-    // Manage Events (for organizers)
-    // Get events created by a specific user (Private route, requires JWT)
-    app.get("/manageEvents", async (req, res) => {
+    app.get("/manageEvents", verifyFirebaseToken, ensureEmailMatch, async (req, res) => {
       const email = req.query.email;
-      // if (req.decoded.email !== email) {
-      //   return res.status(403).send({ error: true, message: 'forbidden access' });
-      // }
-      const query = { creatorEmail: email };
-      const result = await eventsCollection.find(query).toArray();
+      const result = await eventsCollection.find({ creatorEmail: email }).toArray();
       res.send(result);
     });
 
-    // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
-    console.log(
-      "Pinged your deployment. You successfully connected to MongoDB!"
-    );
+    console.log("✅ MongoDB connected!");
   } finally {
-    // Ensures that the client will close when you finish/error
     // await client.close();
   }
 }
@@ -156,5 +157,5 @@ app.get("/", (req, res) => {
 });
 
 app.listen(port, () => {
-  console.log(`Example app listening on port ${port}`);
+  console.log(`🚀 Server listening on port ${port}`);
 });
