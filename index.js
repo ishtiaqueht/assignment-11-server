@@ -29,31 +29,35 @@ const client = new MongoClient(uri, {
 });
 
 // 🔹 Middleware: Verify Firebase ID Token
-const verifyFirebaseToken = async (req, res, next) => {
+const verifyFireBaseToken = async (req, res, next) => {
+  const authHeader = req.headers?.authorization;
+
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).send({ message: 'unauthorized access' })
+  }
+
+  const token = authHeader.split(' ')[1];
+
   try {
-    const authHeader = req.headers.authorization || "";
-    const token = authHeader.startsWith("Bearer ")
-      ? authHeader.split(" ")[1]
-      : null;
-
-    if (!token) return res.status(401).send({ message: "No token provided" });
-
-    const decodedUser = await admin.auth().verifyIdToken(token);
-    req.decoded = decodedUser;
+    const decoded = await admin.auth().verifyIdToken(token);
+    console.log('decoded token', decoded);
+    req.decoded = decoded;
     next();
-  } catch (err) {
-    return res.status(401).send({ message: "Unauthorized" });
   }
-};
+  catch (error) {
+    return res.status(401).send({ message: 'unauthorized access' })
+  }
+}
 
-// 🔹 Middleware: Ensure email match
-const ensureEmailMatch = (req, res, next) => {
-  const emailFromQuery = req.query.email || req.body.userEmail || req.body.creatorEmail;
-  if (emailFromQuery && emailFromQuery !== req.decoded.email) {
-    return res.status(403).send({ error: true, message: "Forbidden access" });
-  }
-  next();
-};
+
+// // 🔹 Middleware: Ensure email match
+// const ensureEmailMatch = (req, res, next) => {
+//   const emailFromQuery = req.query.email || req.body.userEmail || req.body.creatorEmail;
+//   if (emailFromQuery && emailFromQuery !== req.decoded.email) {
+//     return res.status(403).send({ error: true, message: "Forbidden access" });
+//   }
+//   next();
+// };
 
 async function run() {
   try {
@@ -82,14 +86,14 @@ async function run() {
     });
 
     // Private Routes
-    app.post("/events", verifyFirebaseToken, ensureEmailMatch, async (req, res) => {
+    app.post("/events", verifyFireBaseToken, async (req, res) => {
       const newEvent = req.body;
       newEvent.creatorEmail = req.decoded.email;
       const result = await eventsCollection.insertOne(newEvent);
       res.send(result);
     });
 
-    app.put("/events/:id", verifyFirebaseToken, ensureEmailMatch, async (req, res) => {
+    app.put("/events/:id", verifyFireBaseToken, async (req, res) => {
       const id = req.params.id;
       const updatedEvent = req.body;
       const filter = { _id: new ObjectId(id), creatorEmail: req.decoded.email };
@@ -107,20 +111,23 @@ async function run() {
       res.send(result);
     });
 
-    app.delete("/events/:id", verifyFirebaseToken, async (req, res) => {
+    app.delete("/events/:id", verifyFireBaseToken, async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id), creatorEmail: req.decoded.email };
       const result = await eventsCollection.deleteOne(query);
       res.send(result);
     });
 
-    app.get("/myBookings", verifyFirebaseToken, ensureEmailMatch, async (req, res) => {
+    app.get("/myBookings", verifyFireBaseToken, async (req, res) => {
       const email = req.query.email;
+       if (email !== req.decoded.email) {
+        return res.status(403).message({ message: 'forbidden access' })
+      }
       const result = await bookingsCollection.find({ userEmail: email }).toArray();
       res.send(result);
     });
 
-    app.post("/bookings", verifyFirebaseToken, ensureEmailMatch, async (req, res) => {
+    app.post("/bookings", verifyFireBaseToken, async (req, res) => {
       const booking = req.body;
       booking.userEmail = req.decoded.email;
       const existingBooking = await bookingsCollection.findOne({
@@ -132,15 +139,18 @@ async function run() {
       res.send(result);
     });
 
-    app.delete("/bookings/:id", verifyFirebaseToken, async (req, res) => {
+    app.delete("/bookings/:id", verifyFireBaseToken, async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id), userEmail: req.decoded.email };
       const result = await bookingsCollection.deleteOne(query);
       res.send(result);
     });
 
-    app.get("/manageEvents", verifyFirebaseToken, ensureEmailMatch, async (req, res) => {
+    app.get("/manageEvents", verifyFireBaseToken, async (req, res) => {
       const email = req.query.email;
+       if (email !== req.decoded.email) {
+        return res.status(403).message({ message: 'forbidden access' })
+      }
       const result = await eventsCollection.find({ creatorEmail: email }).toArray();
       res.send(result);
     });
