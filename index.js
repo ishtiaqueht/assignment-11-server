@@ -7,8 +7,9 @@ require("dotenv").config();
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const admin = require("firebase-admin");
 
-// 🔹 Firebase Admin initialize
-const serviceAccount = require("./assignment-11-key.json"); // তোমার service account path
+const decoded = Buffer.from(process.env.FB_SERVICE_KEY, 'base64').toString('utf8')
+const serviceAccount = JSON.parse(decoded);
+
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
