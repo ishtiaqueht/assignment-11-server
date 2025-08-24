@@ -1,3 +1,4 @@
 node_modules
 .env
-/assignment-11-key.json
+assignment-11-key.json
+.vercel

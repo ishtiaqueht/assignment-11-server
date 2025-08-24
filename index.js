@@ -30,6 +30,7 @@ const client = new MongoClient(uri, {
 
 // 🔹 Middleware: Verify Firebase ID Token
 const verifyFireBaseToken = async (req, res, next) => {
+  
   const authHeader = req.headers?.authorization;
 
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -45,23 +46,16 @@ const verifyFireBaseToken = async (req, res, next) => {
     next();
   }
   catch (error) {
+    console.log(error);
     return res.status(401).send({ message: 'unauthorized access' })
   }
 }
 
 
-// // 🔹 Middleware: Ensure email match
-// const ensureEmailMatch = (req, res, next) => {
-//   const emailFromQuery = req.query.email || req.body.userEmail || req.body.creatorEmail;
-//   if (emailFromQuery && emailFromQuery !== req.decoded.email) {
-//     return res.status(403).send({ error: true, message: "Forbidden access" });
-//   }
-//   next();
-// };
 
 async function run() {
   try {
-    await client.connect();
+    // await client.connect();
 
     const database = client.db("athleticEventsDB");
     const eventsCollection = database.collection("events");
@@ -118,7 +112,8 @@ async function run() {
       res.send(result);
     });
 
-    app.get("/myBookings", verifyFireBaseToken, async (req, res) => {
+    app.get("/myBookings",verifyFireBaseToken, async (req, res) => {
+      // console.log("hello");
       const email = req.query.email;
        if (email !== req.decoded.email) {
         return res.status(403).message({ message: 'forbidden access' })
@@ -155,8 +150,8 @@ async function run() {
       res.send(result);
     });
 
-    await client.db("admin").command({ ping: 1 });
-    console.log("✅ MongoDB connected!");
+    // await client.db("admin").command({ ping: 1 });
+    // console.log(" MongoDB connected!");
   } finally {
     // await client.close();
   }
